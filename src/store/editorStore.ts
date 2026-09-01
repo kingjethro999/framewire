@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createElement, initialProject, uid } from '../lib/defaults'
-import type { AiOperation, CanvasElement, EditorMode, ElementType, Frame, ProjectDocument, PrototypeConnection } from '../types'
+import type { AiOperation, CanvasElement, EditorMode, ElementType, Frame, ProjectDocument, PrototypeConnection, ResponsiveLayout } from '../types'
 
 interface EditorState {
   project: ProjectDocument
@@ -40,12 +40,15 @@ interface EditorState {
   renamePage: (id: string, name: string) => void
   removePage: (id: string) => void
   addFrame: (device: Frame['device']) => void
+  removeFrame: (id: string) => void
   updateFrame: (id: string, changes: Partial<Frame>) => void
   addConnection: (sourceId: string, targetId: string) => string
   updateConnection: (id: string, changes: Partial<PrototypeConnection>) => void
   removeConnection: (id: string) => void
   applyOperations: (operations: AiOperation[]) => void
   replaceProject: (project: ProjectDocument) => void
+  resetBlankProject: () => void
+  applyResponsiveLayout: (pageId: string, device: 'tablet' | 'mobile', layout: ResponsiveLayout) => void
   undo: () => void
   redo: () => void
 }
@@ -125,22 +128,34 @@ export const useEditorStore = create<EditorState>()(persist((set, get) => ({
   }),
   renamePage: (id, name) => set((state) => commit(state, { ...state.project, pages: state.project.pages.map((page) => page.id === id ? { ...page, name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') } : page) })),
   removePage: (id) => set((state) => {
-    if (state.project.pages.length === 1) return state
     const frameIds = state.project.frames.filter((frame) => frame.pageId === id).map((frame) => frame.id)
     const nextPages = state.project.pages.filter((page) => page.id !== id)
     const nextFrames = state.project.frames.filter((frame) => frame.pageId !== id)
     const elementIds = state.project.elements.filter((element) => frameIds.includes(element.frameId)).map((element) => element.id)
     const nextProject = { ...state.project, pages: nextPages, frames: nextFrames, elements: state.project.elements.filter((element) => !frameIds.includes(element.frameId)), connections: state.project.connections.filter((connection) => !elementIds.includes(connection.sourceId) && !elementIds.includes(connection.targetId)) }
     const nextPage = nextPages[0]
-    return { ...commit(state, nextProject), activePageId: nextPage.id, activeFrameId: nextFrames.find((frame) => frame.pageId === nextPage.id)?.id ?? '', selectedIds: [] }
+    return { ...commit(state, nextProject), activePageId: nextPage?.id ?? '', activeFrameId: nextPage ? nextFrames.find((frame) => frame.pageId === nextPage.id)?.id ?? '' : '', selectedIds: [] }
   }),
   addFrame: (device) => set((state) => {
     const sizes = { desktop: [1200, 780], tablet: [768, 900], mobile: [390, 844], custom: [960, 720] } as const
     const [width, height] = sizes[device]
-    const page = state.project.pages.find((item) => item.id === state.activePageId)!
+    const page = state.project.pages.find((item) => item.id === state.activePageId)
+    if (!page) return state
     const existing = state.project.frames.filter((item) => item.pageId === page.id)
     const frame: Frame = { id: uid('frame'), pageId: page.id, name: `${page.name} / ${device[0].toUpperCase()}${device.slice(1)}`, x: 180 + existing.length * 80, y: 90 + existing.length * 80, width, height, background: '#ffffff', device }
     return { ...commit(state, { ...state.project, frames: [...state.project.frames, frame] }), activeFrameId: frame.id, selectedIds: [] }
+  }),
+  removeFrame: (id) => set((state) => {
+    const elementIds = state.project.elements.filter((element) => element.frameId === id).map((element) => element.id)
+    const nextFrames = state.project.frames.filter((frame) => frame.id !== id)
+    const project = {
+      ...state.project,
+      frames: nextFrames,
+      elements: state.project.elements.filter((element) => element.frameId !== id),
+      connections: state.project.connections.filter((connection) => !elementIds.includes(connection.sourceId) && !elementIds.includes(connection.targetId)),
+    }
+    const nextActiveFrame = state.activeFrameId === id ? nextFrames.find((frame) => frame.pageId === state.activePageId)?.id ?? '' : state.activeFrameId
+    return { ...commit(state, project), activeFrameId: nextActiveFrame, selectedIds: [] }
   }),
   updateFrame: (id, changes) => set((state) => commit(state, { ...state.project, frames: state.project.frames.map((frame) => frame.id === id ? { ...frame, ...changes } : frame) })),
   addConnection: (sourceId, targetId) => {
@@ -179,6 +194,49 @@ export const useEditorStore = create<EditorState>()(persist((set, get) => ({
     const firstPage = project.pages[0]
     const firstFrame = project.frames.find((frame) => frame.pageId === firstPage?.id)
     return { ...commit(state, project), activePageId: firstPage?.id ?? '', activeFrameId: firstFrame?.id ?? '', selectedIds: [] }
+  }),
+  resetBlankProject: () => set((state) => ({
+    ...commit(state, { ...state.project, name: 'Untitled website', pages: [], frames: [], elements: [], connections: [] }),
+    activePageId: '', activeFrameId: '', selectedIds: [], mode: 'select',
+  })),
+  applyResponsiveLayout: (pageId, device, layout) => set((state) => {
+    const sourceFrame = state.project.frames.find((frame) => frame.pageId === pageId && frame.device === 'desktop') ?? state.project.frames.find((frame) => frame.pageId === pageId)
+    if (!sourceFrame) return state
+    const size = device === 'mobile' ? { width: 390, height: 844 } : { width: 768, height: 900 }
+    const existingFrame = state.project.frames.find((frame) => frame.pageId === pageId && frame.device === device)
+    const targetFrame: Frame = existingFrame ?? {
+      id: uid('frame'), pageId, name: `${state.project.pages.find((page) => page.id === pageId)?.name ?? 'Page'} / ${device[0].toUpperCase()}${device.slice(1)}`,
+      x: sourceFrame.x + sourceFrame.width + 120, y: sourceFrame.y, width: size.width, height: Math.max(size.height, layout.frameHeight), background: sourceFrame.background, device,
+    }
+    const sourceElements = state.project.elements.filter((element) => element.frameId === sourceFrame.id)
+    const oldGenerated = state.project.elements.filter((element) => element.frameId === targetFrame.id && element.sourceId)
+    const oldBySource = new Map(oldGenerated.map((element) => [element.sourceId, element]))
+    const generated = layout.elements.flatMap((item) => {
+      const source = sourceElements.find((element) => element.id === item.sourceId)
+      if (!source) return []
+      const existing = oldBySource.get(item.sourceId)
+      return [{
+        ...structuredClone(source),
+        ...existing,
+        id: existing?.id ?? uid('el'), sourceId: source.id, frameId: targetFrame.id,
+        x: item.x, y: item.y, width: item.width, height: item.height,
+        content: item.content ?? source.content,
+        style: { ...source.style, ...item.style },
+      }]
+    })
+    const generatedBySource = new Map(generated.map((element) => [element.sourceId, element.id]))
+    const oldResponsiveConnections = state.project.connections.filter((connection) => connection.sourceConnectionId && oldGenerated.some((element) => element.id === connection.sourceId))
+    const oldConnectionBySource = new Map(oldResponsiveConnections.map((connection) => [connection.sourceConnectionId, connection]))
+    const generatedConnections = state.project.connections.filter((connection) => sourceElements.some((element) => element.id === connection.sourceId) && !connection.sourceConnectionId).flatMap((connection) => {
+      const sourceId = generatedBySource.get(connection.sourceId)
+      if (!sourceId) return []
+      const existing = oldConnectionBySource.get(connection.id)
+      return [{ ...connection, ...existing, id: existing?.id ?? uid('connection'), sourceId, targetId: generatedBySource.get(connection.targetId) ?? connection.targetId, sourceConnectionId: connection.id }]
+    })
+    const frames = existingFrame ? state.project.frames.map((frame) => frame.id === targetFrame.id ? { ...targetFrame, height: Math.max(size.height, layout.frameHeight) } : frame) : [...state.project.frames, targetFrame]
+    const elements = [...state.project.elements.filter((element) => !oldGenerated.some((old) => old.id === element.id)), ...generated]
+    const connections = [...state.project.connections.filter((connection) => !oldResponsiveConnections.some((old) => old.id === connection.id)), ...generatedConnections]
+    return { ...commit(state, { ...state.project, frames, elements, connections }), activeFrameId: targetFrame.id, selectedIds: [] }
   }),
   undo: () => set((state) => {
     if (!state.past.length) return state

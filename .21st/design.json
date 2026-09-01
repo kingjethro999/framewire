@@ -23,8 +23,8 @@
   },
   "components": {
     "installed": [],
-    "preferredPrimitives": [],
-    "patterns": []
+    "preferredPrimitives": ["CustomSelect", "ConfirmDialog", "ErrorState"],
+    "patterns": ["Search listboxes only when option density warrants it", "Keep destructive controls visible on hover and keyboard focus"]
   },
   "constraints": {
     "must": ["Use Lucide icons", "Support light and dark mode", "Keep canvas controls compact", "Use visible keyboard focus"],
@@ -33,7 +33,10 @@
   "decisions": [
     "Use a ChatGPT-inspired neutral application shell with restrained cobalt interaction color.",
     "Keep editing chrome dense and quiet so authored website frames remain the visual focus.",
-    "Use a four-panel workspace only when AI is open; otherwise preserve maximum canvas area."
+    "Use a four-panel workspace only when AI is open; otherwise preserve maximum canvas area.",
+    "Use custom accessible listboxes instead of native selects, adding search only for larger option sets.",
+    "Starter content remains ordinary undoable project data and can be removed down to an empty project.",
+    "Treat AI-responsive results as editable device frames and export them through explicit breakpoint media queries."
   ],
   "evidence": [],
   "generatedAt": "2026-08-31T17:02:33.458Z"

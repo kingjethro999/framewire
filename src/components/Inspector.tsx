@@ -6,6 +6,7 @@ import {
 import clsx from 'clsx'
 import { useEditorStore } from '../store/editorStore'
 import type { ActionType, CanvasElement, PrototypeConnection, TriggerType } from '../types'
+import { CustomSelect, type SelectOption } from './ui/CustomSelect'
 
 const triggers: { value: TriggerType; label: string }[] = [
   { value: 'click', label: 'On click' }, { value: 'doubleClick', label: 'On double click' },
@@ -29,6 +30,10 @@ function NumberField({ label, value, onChange, suffix }: { label: string; value:
   return <Field label={label}><div className="input-with-suffix"><input type="number" value={Math.round(value)} onChange={(event) => onChange(Number(event.target.value))} />{suffix && <small>{suffix}</small>}</div></Field>
 }
 
+function SelectField({ label, value, options, onChange, searchable }: { label: string; value: string; options: SelectOption[]; onChange: (value: string) => void; searchable?: boolean }) {
+  return <div className="property-field"><span>{label}</span><CustomSelect label={label} value={value} options={options} onChange={onChange} searchable={searchable} /></div>
+}
+
 function ConnectionEditor({ connection }: { connection: PrototypeConnection }) {
   const state = useEditorStore()
   const allTargets = [
@@ -38,13 +43,13 @@ function ConnectionEditor({ connection }: { connection: PrototypeConnection }) {
   return (
     <div className="interaction-card">
       <div className="interaction-header"><span><CircleDot size={13} /> Interaction</span><button className="bare-icon" title="Delete interaction" aria-label="Delete interaction" onClick={() => state.removeConnection(connection.id)}><Trash2 size={13} /></button></div>
-      <Field label="Trigger"><select value={connection.trigger} onChange={(event) => state.updateConnection(connection.id, { trigger: event.target.value as TriggerType })}>{triggers.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
-      <Field label="Action"><select value={connection.action} onChange={(event) => state.updateConnection(connection.id, { action: event.target.value as ActionType })}>{actions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
-      <Field label="Destination"><select value={connection.targetId} onChange={(event) => state.updateConnection(connection.id, { targetId: event.target.value })}>{allTargets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
+      <SelectField label="Trigger" value={connection.trigger} options={triggers} onChange={(trigger) => state.updateConnection(connection.id, { trigger: trigger as TriggerType })} />
+      <SelectField label="Action" value={connection.action} options={actions} onChange={(action) => state.updateConnection(connection.id, { action: action as ActionType })} />
+      <SelectField label="Destination" value={connection.targetId} options={allTargets.map((item) => ({ value: item.id, label: item.label }))} onChange={(targetId) => state.updateConnection(connection.id, { targetId })} searchable={allTargets.length > 6} />
       {(connection.action === 'openUrl' || connection.action === 'setText' || connection.action === 'animate') && <Field label="Value"><input value={connection.value ?? ''} placeholder={connection.action === 'openUrl' ? 'https://example.com' : 'Value'} onChange={(event) => state.updateConnection(connection.id, { value: event.target.value })} /></Field>}
       {connection.trigger === 'keyPress' && <Field label="Key"><input value={connection.key ?? 'Enter'} onChange={(event) => state.updateConnection(connection.id, { key: event.target.value })} /></Field>}
       <div className="property-grid"><NumberField label="Delay" value={connection.delay} suffix="ms" onChange={(delay) => state.updateConnection(connection.id, { delay: Math.max(0, delay) })} /><NumberField label="Duration" value={connection.duration} suffix="ms" onChange={(duration) => state.updateConnection(connection.id, { duration: Math.max(0, duration) })} /></div>
-      <Field label="Transition"><select value={connection.transition} onChange={(event) => state.updateConnection(connection.id, { transition: event.target.value as PrototypeConnection['transition'] })}><option value="instant">Instant</option><option value="dissolve">Dissolve</option><option value="slide-left">Slide left</option><option value="slide-right">Slide right</option><option value="scale">Scale</option></select></Field>
+      <SelectField label="Transition" value={connection.transition} options={[{ value: 'instant', label: 'Instant' }, { value: 'dissolve', label: 'Dissolve' }, { value: 'slide-left', label: 'Slide left' }, { value: 'slide-right', label: 'Slide right' }, { value: 'scale', label: 'Scale' }]} onChange={(transition) => state.updateConnection(connection.id, { transition: transition as PrototypeConnection['transition'] })} />
     </div>
   )
 }

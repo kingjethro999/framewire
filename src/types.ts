@@ -48,6 +48,7 @@ export interface ElementStyle {
 
 export interface CanvasElement {
   id: string
+  sourceId?: string
   frameId: string
   type: ElementType
   name: string
@@ -84,6 +85,7 @@ export interface Page {
 
 export interface PrototypeConnection {
   id: string
+  sourceConnectionId?: string
   sourceId: string
   targetId: string
   trigger: TriggerType
@@ -127,4 +129,19 @@ export type AiOperation =
 export interface AiResponse {
   message: string
   operations: AiOperation[]
+}
+
+export interface ResponsiveElementLayout {
+  sourceId: string
+  x: number
+  y: number
+  width: number
+  height: number
+  content?: string
+  style?: Partial<ElementStyle>
+}
+
+export interface ResponsiveLayout {
+  frameHeight: number
+  elements: ResponsiveElementLayout[]
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Rnd } from 'react-rnd'
-import { Check, Grid3X3, LocateFixed, Minus, Plus } from 'lucide-react'
+import { Check, FilePlus2, Grid3X3, LocateFixed, Minus, Plus } from 'lucide-react'
 import clsx from 'clsx'
 import { useEditorStore } from '../store/editorStore'
 import type { CanvasElement, ElementType, Frame } from '../types'
@@ -164,6 +164,15 @@ export function Canvas() {
           )
         })}
       </div>
+
+      {!state.project.pages.length && (
+        <div className="blank-canvas-state">
+          <span><FilePlus2 size={20} /></span>
+          <strong>Blank project</strong>
+          <p>Create the first page when you are ready.</p>
+          <button className="button button-primary" onClick={(event) => { event.stopPropagation(); state.addPage('Home') }}><Plus size={14} /> Create first page</button>
+        </div>
+      )}
 
       <div className="canvas-controls" onPointerDown={(event) => event.stopPropagation()}>
         <IconButton label="Zoom out" onClick={() => state.setZoom(state.zoom - .1)}><Minus size={14} /></IconButton>

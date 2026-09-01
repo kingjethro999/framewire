@@ -59,19 +59,35 @@ export async function exportProjectZip(project: ProjectDocument) {
       project.elements.filter((element) => element.frameId === frame.id).forEach((element) => routeByTarget.set(element.id, filename))
     })
   })
-  const cssParts = [`:root{--fw-primary:${project.tokens.primary};--fw-text:${project.tokens.text};--fw-muted:${project.tokens.muted};--fw-radius:${project.tokens.radius}px;font-family:${project.tokens.fontFamily};color:${project.tokens.text};background:${project.tokens.surface};}`, '*{box-sizing:border-box}', 'html,body{margin:0;min-height:100%;}', 'body{overflow-x:hidden}', '.fw-page{position:relative;margin:0 auto;overflow:hidden}', '.fw-element{position:absolute;white-space:pre-line;overflow:hidden;font:inherit}', '.fw-image{object-fit:cover}', 'button,input,form{font:inherit}', 'button,[data-interactions]:not([data-interactions="[]"]){cursor:pointer}', ':focus-visible{outline:2px solid var(--fw-primary);outline-offset:2px}', '@media(max-width:800px){.fw-page{transform-origin:top left;max-width:100%;}}']
+  const cssParts = [
+    `:root{--fw-primary:${project.tokens.primary};--fw-text:${project.tokens.text};--fw-muted:${project.tokens.muted};--fw-radius:${project.tokens.radius}px;font-family:${project.tokens.fontFamily};color:${project.tokens.text};background:${project.tokens.surface};}`,
+    '*{box-sizing:border-box}', 'html,body{margin:0;min-height:100%;}', 'body{overflow-x:hidden}',
+    '.fw-page{position:relative;min-height:100vh}', '.fw-device-frame{position:relative;margin:0 auto;overflow:hidden;max-width:100%}',
+    '.fw-tablet,.fw-mobile{display:none}', '.fw-element{position:absolute;white-space:pre-line;overflow:hidden;font:inherit}',
+    '.fw-image{object-fit:cover}', 'button,input,form{font:inherit}', 'button,[data-interactions]:not([data-interactions="[]"]){cursor:pointer}',
+    ':focus-visible{outline:2px solid var(--fw-primary);outline-offset:2px}',
+    '@media(max-width:1024px){.fw-page.has-tablet .fw-desktop{display:none}.fw-page.has-tablet .fw-tablet{display:block}}',
+    '@media(max-width:600px){.fw-page.has-mobile .fw-desktop,.fw-page.has-mobile .fw-tablet{display:none}.fw-page.has-mobile .fw-mobile{display:block}}',
+  ]
 
   project.pages.forEach((page) => {
-    const frame = project.frames.find((item) => item.pageId === page.id)
-    if (!frame) return
-    const elements = project.elements.filter((element) => element.frameId === frame.id)
-    const body = elements.map((element) => {
-      const interactions = project.connections.filter((connection) => connection.sourceId === element.id).map((connection) => ({ ...connection, targetPage: routeByTarget.get(connection.targetId) }))
-      cssParts.push(cssForElement(element))
-      return elementHtml(element, interactions)
+    const frames = project.frames.filter((item) => item.pageId === page.id)
+    const primaryFrame = frames.find((frame) => frame.device === 'desktop') ?? frames[0]
+    if (!primaryFrame) return
+    const responsiveFrames = ['desktop', 'tablet', 'mobile'].flatMap((device) => {
+      const frame = frames.find((candidate) => candidate.device === device)
+      if (!frame) return []
+      const elements = project.elements.filter((element) => element.frameId === frame.id)
+      const body = elements.map((element) => {
+        const interactions = project.connections.filter((connection) => connection.sourceId === element.id).map((connection) => ({ ...connection, targetPage: routeByTarget.get(connection.targetId) }))
+        cssParts.push(cssForElement(element))
+        return elementHtml(element, interactions)
+      }).join('\n')
+      return [`<section class="fw-device-frame fw-${device}" style="width:${frame.width}px;min-height:${frame.height}px;background:${frame.background}">${body}</section>`]
     }).join('\n')
+    const pageClasses = ['fw-page', frames.some((frame) => frame.device === 'tablet') && 'has-tablet', frames.some((frame) => frame.device === 'mobile') && 'has-mobile'].filter(Boolean).join(' ')
     const filename = page.slug === 'index' ? 'index.html' : `${page.slug}.html`
-    zip.file(filename, `<!doctype html>\n<html lang="en">\n<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="${frame.background}"><link rel="icon" href="framewire-icon.png"><link rel="stylesheet" href="styles.css"><title>${escapeHtml(page.name)} · ${escapeHtml(project.name)}</title></head>\n<body><main class="fw-page" style="width:${frame.width}px;min-height:${frame.height}px;background:${frame.background}">${body}</main><script src="runtime.js"></script></body>\n</html>`)
+    zip.file(filename, `<!doctype html>\n<html lang="en">\n<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="${primaryFrame.background}"><link rel="icon" href="framewire-icon.png"><link rel="stylesheet" href="styles.css"><title>${escapeHtml(page.name)} · ${escapeHtml(project.name)}</title></head>\n<body><main class="${pageClasses}">${responsiveFrames}</main><script src="runtime.js"></script></body>\n</html>`)
   })
   zip.file('styles.css', cssParts.join('\n'))
   zip.file('runtime.js', runtimeScript)

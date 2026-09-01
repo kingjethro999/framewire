@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Canvas } from './components/Canvas'
 import { Inspector } from './components/Inspector'
 import { LeftSidebar } from './components/LeftSidebar'
@@ -7,6 +7,8 @@ import { ErrorState } from './components/ui/ErrorState'
 import { logger } from './lib/logger'
 import { useEditorStore } from './store/editorStore'
 import type { ProjectDocument } from './types'
+import { ShortcutModal } from './features/shortcuts/components/ShortcutModal'
+import { useEditorShortcuts } from './features/shortcuts/hooks/useEditorShortcuts'
 
 const AiSidebar = lazy(() => import('./features/ai/components/AiSidebar').then((module) => ({ default: module.AiSidebar })))
 const PreviewModal = lazy(() => import('./features/preview/components/PreviewModal').then((module) => ({ default: module.PreviewModal })))
@@ -16,38 +18,14 @@ export function App() {
   const aiOpen = useEditorStore((state) => state.aiOpen)
   const previewOpen = useEditorStore((state) => state.previewOpen)
   const [error, setError] = useState<string | null>(null)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
   }, [theme])
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement
-      const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
-      if (editing) return
-      const state = useEditorStore.getState()
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
-        event.preventDefault()
-        if (event.shiftKey) state.redo()
-        else state.undo()
-      } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
-        event.preventDefault(); state.duplicateElements(state.selectedIds)
-      } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (state.selectedIds.length) { event.preventDefault(); state.removeElements(state.selectedIds) }
-      } else if (event.key === 'v') state.setMode('select')
-      else if (event.key === 'h') state.setMode('hand')
-      else if (event.key === 't') state.setMode('text')
-      else if (event.key === 'r') state.setMode('rectangle')
-      else if (event.key === 'p') state.setMode('prototype')
-      else if (event.key === 'Escape') { state.select([]); state.setMode('select'); state.setPreviewOpen(false) }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
-
-  const runExport = async () => {
+  const runExport = useCallback(async () => {
     setError(null)
     try {
       const { exportProjectZip } = await import('./features/export/lib/exportProject')
@@ -58,7 +36,11 @@ export function App() {
       setError(message)
       logger.error('export', 'ZIP export failed', caught)
     }
-  }
+  }, [])
+
+  const showShortcuts = useCallback(() => setShortcutsOpen(true), [])
+  const hideShortcuts = useCallback(() => setShortcutsOpen(false), [])
+  useEditorShortcuts({ onExport: runExport, onShowShortcuts: showShortcuts, onHideShortcuts: hideShortcuts })
 
   const runJsonExport = async () => {
     const { exportProjectJson } = await import('./features/export/lib/exportProject')
@@ -82,7 +64,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <Topbar onExport={() => void runExport()} onExportJson={() => void runJsonExport()} onImport={(file) => void importProject(file)} />
+      <Topbar onExport={() => void runExport()} onExportJson={() => void runJsonExport()} onImport={(file) => void importProject(file)} onShowShortcuts={showShortcuts} />
       <div className="editor-layout">
         <LeftSidebar />
         <Canvas />
@@ -91,6 +73,7 @@ export function App() {
       </div>
       {error && <div className="floating-error"><ErrorState compact title="Export failed" message={error} onRetry={() => void runExport()} /></div>}
       {previewOpen && <Suspense fallback={<div className="modal-backdrop panel-loading" aria-label="Loading preview" />}><PreviewModal /></Suspense>}
+      <ShortcutModal open={shortcutsOpen} onClose={hideShortcuts} />
     </div>
   )
 }

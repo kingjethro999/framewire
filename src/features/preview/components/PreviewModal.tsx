@@ -1,4 +1,4 @@
-import { ExternalLink, Monitor, RotateCcw, Smartphone, Tablet, X } from 'lucide-react'
+import { CheckCircle2, ExternalLink, LoaderCircle, Monitor, RotateCcw, Smartphone, Sparkles, Tablet, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useEditorStore } from '../../../store/editorStore'
@@ -6,6 +6,9 @@ import { ElementRenderer } from '../../canvas/components/ElementRenderer'
 import { getElementStyle } from '../../canvas/lib/elementStyle'
 import { IconButton } from '../../../components/ui/IconButton'
 import { usePrototypeRuntime } from '../hooks/usePrototypeRuntime'
+import { CustomSelect } from '../../../components/ui/CustomSelect'
+import { ErrorState } from '../../../components/ui/ErrorState'
+import { useResponsiveAssistant } from '../hooks/useResponsiveAssistant'
 
 const devices = {
   desktop: { width: 1200, icon: Monitor, label: 'Desktop' },
@@ -19,6 +22,7 @@ export function PreviewModal() {
   const setPreviewOpen = useEditorStore((state) => state.setPreviewOpen)
   const [device, setDevice] = useState<keyof typeof devices>('desktop')
   const runtime = usePrototypeRuntime(activePageId)
+  const responsive = useResponsiveAssistant()
   const page = project.pages.find((item) => item.id === runtime.pageId) ?? project.pages[0]
   const frame = useMemo(() => {
     const candidates = project.frames.filter((item) => item.pageId === page.id)
@@ -26,6 +30,7 @@ export function PreviewModal() {
   }, [device, page.id, project.frames])
   const elements = project.elements.filter((element) => element.frameId === frame?.id)
   const ratio = frame ? devices[device].width / frame.width : 1
+  const hasDedicatedFrame = project.frames.some((item) => item.pageId === page.id && item.device === device)
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Website preview">
@@ -33,9 +38,15 @@ export function PreviewModal() {
         <div className="preview-toolbar">
           <div className="preview-brand"><img src="/framewire-icon.png" alt="" /><strong>Preview</strong><span>{page.name}</span></div>
           <div className="device-picker">{Object.entries(devices).map(([key, item]) => { const Icon = item.icon; return <button key={key} className={clsx(device === key && 'is-active')} title={item.label} aria-label={item.label} onClick={() => setDevice(key as keyof typeof devices)}><Icon size={15} /></button> })}</div>
-          <div className="preview-actions"><select value={page.id} onChange={(event) => runtime.setPageId(event.target.value)}>{project.pages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><IconButton label="Reset page" onClick={() => runtime.setPageId(activePageId)}><RotateCcw size={15} /></IconButton><IconButton label="Open exported site" disabled><ExternalLink size={15} /></IconButton><IconButton label="Close preview" onClick={() => setPreviewOpen(false)}><X size={17} /></IconButton></div>
+          <div className="preview-actions">
+            {device !== 'desktop' && <button className="button button-responsive" disabled={responsive.loading} onClick={() => void responsive.generate(page.id, device)}>{responsive.loading ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}{hasDedicatedFrame ? 'Rewrite responsive' : 'Auto responsive'}</button>}
+            <CustomSelect label="Preview page" value={page.id} options={project.pages.map((item) => ({ value: item.id, label: item.name }))} onChange={runtime.setPageId} align="right" />
+            <IconButton label="Reset page" onClick={() => runtime.setPageId(activePageId)}><RotateCcw size={15} /></IconButton><IconButton label="Open exported site" disabled><ExternalLink size={15} /></IconButton><IconButton label="Close preview" onClick={() => setPreviewOpen(false)}><X size={17} /></IconButton>
+          </div>
         </div>
         <div className="preview-stage">
+          {responsive.error && <div className="preview-notice"><ErrorState compact title="Responsive generation failed" message={responsive.error} onRetry={() => void responsive.generate(page.id, device === 'desktop' ? 'mobile' : device)} /></div>}
+          {responsive.message && !responsive.error && <div className="preview-success"><CheckCircle2 size={14} />{responsive.message}</div>}
           <div className={clsx('preview-device', `is-${device}`, runtime.transition && `transition-${runtime.transition}`)} style={{ width: devices[device].width, minHeight: frame ? frame.height * ratio : 720, '--project-font': project.tokens.fontFamily } as React.CSSProperties}>
             {frame && <div className="preview-page" style={{ width: frame.width, height: frame.height, background: frame.background, transform: `scale(${ratio})`, transformOrigin: 'top left' }}>
               {elements.map((element) => !runtime.hiddenIds.has(element.id) && element.visible && (
