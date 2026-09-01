@@ -1,18 +1,20 @@
 import {
-  AlignCenter, AlignLeft, AlignRight, Blend, Box, ChevronDown, CircleDot, Eye,
-  EyeOff, Link2, Lock, LockOpen, MousePointerClick, Plus, Sparkles,
+  AlignCenter, AlignLeft, AlignRight, Blend, Box, ChevronDown, CircleDot, Component, Eye,
+  EyeOff, Link2, Lock, LockOpen, MousePointerClick, Plus, Rows3, Sparkles,
   Trash2, Workflow,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useEditorStore } from '../store/editorStore'
 import type { ActionType, CanvasElement, PrototypeConnection, TriggerType } from '../types'
 import { CustomSelect, type SelectOption } from './ui/CustomSelect'
+import { defaultLayout, withWorkspace } from '../features/studio/lib/workspaceDefaults'
 
 const triggers: { value: TriggerType; label: string }[] = [
   { value: 'click', label: 'On click' }, { value: 'doubleClick', label: 'On double click' },
   { value: 'hover', label: 'On hover' }, { value: 'longPress', label: 'On long press' },
   { value: 'hold', label: 'While holding' }, { value: 'submit', label: 'On submit' },
   { value: 'keyPress', label: 'On key press' }, { value: 'inView', label: 'When visible' },
+  { value: 'mouseMove', label: 'On mouse movement' }, { value: 'scrollProgress', label: 'While scrolling' },
 ]
 
 const actions: { value: ActionType; label: string }[] = [
@@ -20,6 +22,10 @@ const actions: { value: ActionType; label: string }[] = [
   { value: 'scrollTo', label: 'Scroll to' }, { value: 'show', label: 'Show layer' },
   { value: 'hide', label: 'Hide layer' }, { value: 'toggle', label: 'Toggle layer' },
   { value: 'setText', label: 'Set text' }, { value: 'animate', label: 'Play animation' },
+  { value: 'setVariable', label: 'Set variable' }, { value: 'setVariant', label: 'Set component variant' },
+  { value: 'openOverlay', label: 'Open overlay' }, { value: 'closeOverlay', label: 'Close overlay' },
+  { value: 'submitForm', label: 'Submit form' },
+  { value: 'scrollAnimate', label: 'Scroll-linked animation' },
 ]
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -36,6 +42,8 @@ function SelectField({ label, value, options, onChange, searchable }: { label: s
 
 function ConnectionEditor({ connection }: { connection: PrototypeConnection }) {
   const state = useEditorStore()
+  const workspace = withWorkspace(state.project.workspace)
+  const variants = workspace.components.flatMap((component) => component.variants.map((variant) => ({ value: variant.id, label: `${component.name} · ${variant.name}` })))
   const allTargets = [
     ...state.project.pages.map((page) => ({ id: state.project.frames.find((frame) => frame.pageId === page.id)?.id ?? '', label: `Page · ${page.name}` })),
     ...state.project.elements.map((element) => ({ id: element.id, label: `Layer · ${element.name}` })),
@@ -47,6 +55,8 @@ function ConnectionEditor({ connection }: { connection: PrototypeConnection }) {
       <SelectField label="Action" value={connection.action} options={actions} onChange={(action) => state.updateConnection(connection.id, { action: action as ActionType })} />
       <SelectField label="Destination" value={connection.targetId} options={allTargets.map((item) => ({ value: item.id, label: item.label }))} onChange={(targetId) => state.updateConnection(connection.id, { targetId })} searchable={allTargets.length > 6} />
       {(connection.action === 'openUrl' || connection.action === 'setText' || connection.action === 'animate') && <Field label="Value"><input value={connection.value ?? ''} placeholder={connection.action === 'openUrl' ? 'https://example.com' : 'Value'} onChange={(event) => state.updateConnection(connection.id, { value: event.target.value })} /></Field>}
+      {connection.action === 'setVariable' && <><SelectField label="Variable" value={connection.variableId ?? ''} options={workspace.variables.map((variable) => ({ value: variable.id, label: variable.name }))} onChange={(variableId) => state.updateConnection(connection.id, { variableId })} /><Field label="Value"><input value={connection.value ?? ''} onChange={(event) => state.updateConnection(connection.id, { value: event.target.value })} /></Field></>}
+      {connection.action === 'setVariant' && <SelectField label="Variant" value={connection.variantId ?? ''} options={variants} onChange={(variantId) => state.updateConnection(connection.id, { variantId })} searchable={variants.length > 8} />}
       {connection.trigger === 'keyPress' && <Field label="Key"><input value={connection.key ?? 'Enter'} onChange={(event) => state.updateConnection(connection.id, { key: event.target.value })} /></Field>}
       <div className="property-grid"><NumberField label="Delay" value={connection.delay} suffix="ms" onChange={(delay) => state.updateConnection(connection.id, { delay: Math.max(0, delay) })} /><NumberField label="Duration" value={connection.duration} suffix="ms" onChange={(duration) => state.updateConnection(connection.id, { duration: Math.max(0, duration) })} /></div>
       <SelectField label="Transition" value={connection.transition} options={[{ value: 'instant', label: 'Instant' }, { value: 'dissolve', label: 'Dissolve' }, { value: 'slide-left', label: 'Slide left' }, { value: 'slide-right', label: 'Slide right' }, { value: 'scale', label: 'Scale' }]} onChange={(transition) => state.updateConnection(connection.id, { transition: transition as PrototypeConnection['transition'] })} />
@@ -56,6 +66,8 @@ function ConnectionEditor({ connection }: { connection: PrototypeConnection }) {
 
 function DesignPanel({ element }: { element: CanvasElement }) {
   const state = useEditorStore()
+  const workspace = withWorkspace(state.project.workspace)
+  const component = workspace.components.find((item) => item.id === element.componentDefinitionId)
   const update = (changes: Partial<CanvasElement>) => state.updateElement(element.id, changes)
   const updateStyle = (changes: Partial<CanvasElement['style']>) => update({ style: { ...element.style, ...changes } })
   return (
@@ -66,6 +78,10 @@ function DesignPanel({ element }: { element: CanvasElement }) {
         {element.type !== 'rectangle' && element.type !== 'divider' && element.type !== 'image' && <Field label="Content"><textarea rows={4} value={element.content} onChange={(event) => update({ content: event.target.value })} /></Field>}
         {element.type === 'image' && <><Field label="Image URL"><input value={element.src ?? ''} onChange={(event) => update({ src: event.target.value })} /></Field><Field label="Alt text"><input value={element.alt ?? ''} onChange={(event) => update({ alt: event.target.value })} /></Field></>}
       </section>
+
+      {component && <section className="property-section"><div className="section-heading"><span>Component instance</span><Component size={13} /></div><Field label="Master"><input value={component.name} readOnly /></Field><SelectField label="Variant" value={element.componentVariantId ?? component.variants[0]?.id ?? ''} options={component.variants.map((variant) => ({ value: variant.id, label: variant.name }))} onChange={(variantId) => state.applyComponentVariant(element.id, variantId)} /><button className="button button-secondary wide-button" onClick={() => state.detachComponentInstance(element.id)}>Detach instance</button></section>}
+
+      <section className="property-section"><div className="section-heading"><span>Responsive</span><Rows3 size={13} /></div><SelectField label="Width" value={(element.layout ?? defaultLayout).widthMode} options={[{ value: 'fixed', label: 'Fixed' }, { value: 'fill', label: 'Fill container' }, { value: 'hug', label: 'Hug content' }]} onChange={(widthMode) => update({ layout: { ...(element.layout ?? defaultLayout), widthMode: widthMode as NonNullable<CanvasElement['layout']>['widthMode'] } })} /><SelectField label="Height" value={(element.layout ?? defaultLayout).heightMode} options={[{ value: 'fixed', label: 'Fixed' }, { value: 'fill', label: 'Fill container' }, { value: 'hug', label: 'Hug content' }]} onChange={(heightMode) => update({ layout: { ...(element.layout ?? defaultLayout), heightMode: heightMode as NonNullable<CanvasElement['layout']>['heightMode'] } })} /><SelectField label="Semantic tag" value={element.semanticTag ?? 'div'} options={['div', 'section', 'header', 'nav', 'main', 'article', 'aside', 'footer', 'h1', 'h2', 'h3', 'p'].map((value) => ({ value, label: value }))} onChange={(semanticTag) => update({ semanticTag: semanticTag as CanvasElement['semanticTag'] })} /><Field label="ARIA label"><input value={element.ariaLabel ?? ''} placeholder={element.name} onChange={(event) => update({ ariaLabel: event.target.value })} /></Field></section>
 
       <section className="property-section">
         <div className="section-heading"><span>Position</span><small>px</small></div>
