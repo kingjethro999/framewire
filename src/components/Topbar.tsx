@@ -1,9 +1,10 @@
 import {
-  Bot, ChevronDown, Cloud, Download, Hand, Keyboard, Moon, MousePointer2, Play,
+  Bot, ChevronDown, Cloud, Command, Download, Hand, Keyboard, Moon, MousePointer2, Play,
   Redo2, RectangleHorizontal, Sun, Type, Undo2, Upload, Workflow,
 } from 'lucide-react'
 import { useEditorStore } from '../store/editorStore'
 import { IconButton } from './ui/IconButton'
+import { useStudioStore } from '../features/studio/store/studioStore'
 
 interface TopbarProps {
   onExport: () => void
@@ -14,6 +15,7 @@ interface TopbarProps {
 
 export function Topbar({ onExport, onExportJson, onImport, onShowShortcuts }: TopbarProps) {
   const state = useEditorStore()
+  const studioOpen = useStudioStore((studioState) => studioState.open)
   const modes = [
     { id: 'select' as const, icon: MousePointer2, label: 'Select' },
     { id: 'hand' as const, icon: Hand, label: 'Pan canvas' },
@@ -51,6 +53,7 @@ export function Topbar({ onExport, onExportJson, onImport, onShowShortcuts }: To
       <div className="topbar-section topbar-actions">
         <label className="icon-button" title="Import Framewire project" aria-label="Import Framewire project"><Upload size={17} /><input hidden type="file" accept=".json,.framewire.json,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) onImport(file); event.target.value = '' }} /></label>
         <IconButton label="Ask Framewire AI" active={state.aiOpen} onClick={() => state.setAiOpen(!state.aiOpen)}><Bot size={17} /></IconButton>
+        <IconButton label="Open Studio" active={studioOpen} onClick={() => useStudioStore.getState().setOpen(true)}><Command size={17} /></IconButton>
         <IconButton label="Keyboard shortcuts" onClick={onShowShortcuts}><Keyboard size={17} /></IconButton>
         <IconButton label={state.theme === 'light' ? 'Use dark mode' : 'Use light mode'} onClick={() => state.setTheme(state.theme === 'light' ? 'dark' : 'light')}>
           {state.theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
