@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createElement, initialProject, uid } from '../lib/defaults'
-import type { AiOperation, CanvasElement, EditorMode, ElementType, Frame, ProjectDocument, PrototypeConnection, ResponsiveLayout } from '../types'
+import { defaultLayout, withWorkspace } from '../features/studio/lib/workspaceDefaults'
+import type { AiOperation, CanvasElement, ComponentDefinition, EditorMode, ElementType, Frame, Page, ProjectDocument, ProjectWorkspace, PrototypeConnection, ResponsiveLayout } from '../types'
 
 interface EditorState {
   project: ProjectDocument
@@ -38,6 +39,7 @@ interface EditorState {
   duplicateElements: (ids: string[]) => void
   addPage: (name?: string) => void
   renamePage: (id: string, name: string) => void
+  updatePage: (id: string, changes: Partial<Page>) => void
   removePage: (id: string) => void
   addFrame: (device: Frame['device']) => void
   removeFrame: (id: string) => void
@@ -49,6 +51,16 @@ interface EditorState {
   replaceProject: (project: ProjectDocument) => void
   resetBlankProject: () => void
   applyResponsiveLayout: (pageId: string, device: 'tablet' | 'mobile', layout: ResponsiveLayout) => void
+  updateWorkspace: (updater: (workspace: ProjectWorkspace) => ProjectWorkspace, activity?: string) => void
+  createComponentFromElement: (elementId: string) => string | null
+  insertComponentInstance: (definitionId: string) => string | null
+  detachComponentInstance: (elementId: string) => void
+  applyComponentVariant: (elementId: string, variantId: string) => void
+  autoArrangeFrame: (mode: 'row' | 'column' | 'grid', gap: number, columns?: number) => void
+  replaceStyleValue: (from: string, to: string) => void
+  replaceAssetUsage: (fromAssetId: string, toAssetId: string) => void
+  applyElementFixes: (fixes: Array<{ id: string; changes: Partial<CanvasElement> }>, activity: string) => void
+  insertPresetElements: (items: Array<{ type: ElementType; x: number; y: number; content: string }>, label: string) => void
   undo: () => void
   redo: () => void
 }
@@ -62,6 +74,18 @@ const commit = (state: EditorState, project: ProjectDocument) => ({
   past: [...state.past.slice(-(MAX_HISTORY - 1)), clone(state.project)],
   future: [],
 })
+
+const addActivity = (project: ProjectDocument, action?: string): ProjectDocument => {
+  if (!action) return project
+  const workspace = withWorkspace(project.workspace)
+  return {
+    ...project,
+    workspace: {
+      ...workspace,
+      activity: [{ id: uid('activity'), actor: 'You', action, createdAt: new Date().toISOString() }, ...workspace.activity].slice(0, 100),
+    },
+  }
+}
 
 export const useEditorStore = create<EditorState>()(persist((set, get) => ({
   project: initialProject,
@@ -127,6 +151,7 @@ export const useEditorStore = create<EditorState>()(persist((set, get) => ({
     return { ...commit(state, { ...state.project, pages: [...state.project.pages, page], frames: [...state.project.frames, frame] }), activePageId: page.id, activeFrameId: frame.id, selectedIds: [] }
   }),
   renamePage: (id, name) => set((state) => commit(state, { ...state.project, pages: state.project.pages.map((page) => page.id === id ? { ...page, name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') } : page) })),
+  updatePage: (id, changes) => set((state) => commit(state, { ...state.project, pages: state.project.pages.map((page) => page.id === id ? { ...page, ...changes } : page) })),
   removePage: (id) => set((state) => {
     const frameIds = state.project.frames.filter((frame) => frame.pageId === id).map((frame) => frame.id)
     const nextPages = state.project.pages.filter((page) => page.id !== id)
@@ -238,6 +263,106 @@ export const useEditorStore = create<EditorState>()(persist((set, get) => ({
     const connections = [...state.project.connections.filter((connection) => !oldResponsiveConnections.some((old) => old.id === connection.id)), ...generatedConnections]
     return { ...commit(state, { ...state.project, frames, elements, connections }), activeFrameId: targetFrame.id, selectedIds: [] }
   }),
+  updateWorkspace: (updater, activity) => set((state) => {
+    const workspace = updater(withWorkspace(state.project.workspace))
+    return commit(state, addActivity({ ...state.project, workspace }, activity))
+  }),
+  createComponentFromElement: (elementId) => {
+    const state = get()
+    const source = state.project.elements.find((element) => element.id === elementId)
+    if (!source) return null
+    const definitionId = uid('component')
+    const definition: ComponentDefinition = {
+      id: definitionId,
+      name: source.name,
+      description: `Reusable ${source.type} component`,
+      sourceElementId: source.id,
+      properties: [{ id: uid('prop'), name: 'Content', type: 'text', defaultValue: source.content }],
+      variants: [
+        { id: uid('variant'), name: 'Default', propertyValues: { State: 'Default' }, overrides: {} },
+        { id: uid('variant'), name: 'Hover', propertyValues: { State: 'Hover' }, overrides: { style: { ...source.style, opacity: .88 } } },
+        { id: uid('variant'), name: 'Disabled', propertyValues: { State: 'Disabled' }, overrides: { style: { ...source.style, opacity: .45 } } },
+      ],
+      createdAt: new Date().toISOString(),
+    }
+    const workspace = withWorkspace(state.project.workspace)
+    const project = addActivity({
+      ...state.project,
+      workspace: { ...workspace, components: [...workspace.components, definition] },
+      elements: state.project.elements.map((element) => element.id === elementId ? { ...element, componentDefinitionId: definitionId, componentVariantId: definition.variants[0].id } : element),
+    }, `Created component “${source.name}”`)
+    set(commit(state, project))
+    return definitionId
+  },
+  insertComponentInstance: (definitionId) => {
+    const state = get()
+    const definition = withWorkspace(state.project.workspace).components.find((item) => item.id === definitionId)
+    const source = definition && state.project.elements.find((element) => element.id === definition.sourceElementId)
+    if (!definition || !source || !state.activeFrameId) return null
+    const id = uid('el')
+    const instance: CanvasElement = {
+      ...structuredClone(source), id, frameId: state.activeFrameId, x: source.x + 32, y: source.y + 32,
+      name: `${definition.name} instance`, componentDefinitionId: definition.id,
+      componentVariantId: definition.variants[0]?.id, componentProps: { Content: source.content },
+      layout: source.layout ?? { ...defaultLayout },
+    }
+    set({ ...commit(state, addActivity({ ...state.project, elements: [...state.project.elements, instance] }, `Inserted ${definition.name} instance`)), selectedIds: [id] })
+    return id
+  },
+  detachComponentInstance: (elementId) => set((state) => commit(state, addActivity({
+    ...state.project,
+    elements: state.project.elements.map((element) => element.id === elementId ? { ...element, componentDefinitionId: undefined, componentVariantId: undefined, componentProps: undefined } : element),
+  }, 'Detached a component instance'))),
+  applyComponentVariant: (elementId, variantId) => set((state) => {
+    const element = state.project.elements.find((item) => item.id === elementId)
+    const definition = withWorkspace(state.project.workspace).components.find((item) => item.id === element?.componentDefinitionId)
+    const variant = definition?.variants.find((item) => item.id === variantId)
+    if (!element || !variant) return state
+    const updated = { ...element, ...variant.overrides, style: variant.overrides.style ? { ...element.style, ...variant.overrides.style } : element.style, componentVariantId: variantId }
+    return commit(state, { ...state.project, elements: state.project.elements.map((item) => item.id === elementId ? updated : item) })
+  }),
+  autoArrangeFrame: (mode, gap, columns = 2) => set((state) => {
+    const frameElements = state.project.elements.filter((element) => element.frameId === state.activeFrameId && element.visible)
+    let cursorX = 32; let cursorY = 32; let rowHeight = 0
+    const arranged = new Map<string, { x: number; y: number }>()
+    frameElements.forEach((element, index) => {
+      if (mode === 'column') {
+        arranged.set(element.id, { x: 32, y: cursorY }); cursorY += element.height + gap
+      } else if (mode === 'row') {
+        arranged.set(element.id, { x: cursorX, y: 32 }); cursorX += element.width + gap
+      } else {
+        const column = index % Math.max(1, columns)
+        if (column === 0 && index > 0) { cursorY += rowHeight + gap; cursorX = 32; rowHeight = 0 }
+        arranged.set(element.id, { x: cursorX, y: cursorY }); cursorX += element.width + gap; rowHeight = Math.max(rowHeight, element.height)
+      }
+    })
+    return commit(state, addActivity({ ...state.project, elements: state.project.elements.map((element) => arranged.has(element.id) ? { ...element, ...arranged.get(element.id)! } : element) }, `Applied ${mode} auto layout`))
+  }),
+  replaceStyleValue: (from, to) => set((state) => commit(state, addActivity({
+    ...state.project,
+    elements: state.project.elements.map((element) => ({
+      ...element,
+      style: Object.fromEntries(Object.entries(element.style).map(([key, value]) => [key, String(value) === from ? (typeof value === 'number' ? Number(to) : to) : value])) as unknown as CanvasElement['style'],
+    })),
+  }, `Replaced design value ${from} with ${to}`))),
+  replaceAssetUsage: (fromAssetId, toAssetId) => set((state) => {
+    const workspace = withWorkspace(state.project.workspace)
+    const target = workspace.assets.find((asset) => asset.id === toAssetId)
+    if (!target) return state
+    return commit(state, addActivity({ ...state.project, elements: state.project.elements.map((element) => element.assetId === fromAssetId ? { ...element, assetId: toAssetId, src: target.src, alt: target.alt || element.alt } : element) }, 'Replaced an asset across the project'))
+  }),
+  applyElementFixes: (fixes, activity) => set((state) => {
+    const byId = new Map(fixes.map((fix) => [fix.id, fix.changes]))
+    return commit(state, addActivity({ ...state.project, elements: state.project.elements.map((element) => {
+      const changes = byId.get(element.id)
+      return changes ? { ...element, ...changes, style: changes.style ? { ...element.style, ...changes.style } : element.style } : element
+    }) }, activity))
+  }),
+  insertPresetElements: (items, label) => set((state) => {
+    if (!state.activeFrameId) return state
+    const inserted = items.map((item) => ({ ...createElement(item.type, state.activeFrameId, item.x, item.y), content: item.content }))
+    return { ...commit(state, addActivity({ ...state.project, elements: [...state.project.elements, ...inserted] }, `Inserted template ${label}`)), selectedIds: inserted.map((item) => item.id) }
+  }),
   undo: () => set((state) => {
     if (!state.past.length) return state
     const previous = state.past[state.past.length - 1]
@@ -250,7 +375,7 @@ export const useEditorStore = create<EditorState>()(persist((set, get) => ({
   }),
 }), {
   name: 'framewire-editor-v1',
-  partialize: (state) => ({ project: state.project, activePageId: state.activePageId, activeFrameId: state.activeFrameId, zoom: state.zoom, pan: state.pan, snapToGrid: state.snapToGrid, theme: state.theme }),
+  partialize: (state) => ({ project: { ...state.project, workspace: withWorkspace(state.project.workspace) }, activePageId: state.activePageId, activeFrameId: state.activeFrameId, zoom: state.zoom, pan: state.pan, snapToGrid: state.snapToGrid, theme: state.theme }),
 }))
 
 function cloneElement(element: CanvasElement): CanvasElement {
