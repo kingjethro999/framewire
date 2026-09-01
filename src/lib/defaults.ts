@@ -1,4 +1,5 @@
 import type { CanvasElement, ElementStyle, ElementType, ProjectDocument } from '../types'
+import { createWorkspace, defaultLayout } from '../features/studio/lib/workspaceDefaults'
 
 export const uid = (prefix: string) => `${prefix}_${crypto.randomUUID().slice(0, 8)}`
 
@@ -70,6 +71,7 @@ export const createElement = (type: ElementType, frameId: string, x = 80, y = 80
   y,
   visible: true,
   locked: false,
+  layout: { ...defaultLayout },
   ...elementPresets[type],
 }) as CanvasElement
 
@@ -91,6 +93,7 @@ export const initialProject: ProjectDocument = {
     { ...createElement('card', frameId, 560, 510), content: 'Real interactions\nConnect elements and configure production-ready behavior.' },
   ],
   connections: [],
+  workspace: createWorkspace(),
   tokens: {
     primary: '#4f5ff7', canvas: '#e9e9e4', surface: '#ffffff', text: '#171717', muted: '#6f6f69', radius: 10,
     fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',

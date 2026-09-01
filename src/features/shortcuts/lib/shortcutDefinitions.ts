@@ -30,5 +30,6 @@ export const shortcutDefinitions: ShortcutDefinition[] = [
   { category: 'Workspace', label: 'Preview website', keys: ['Mod', 'Enter'] },
   { category: 'Workspace', label: 'Export source ZIP', keys: ['Mod', 'E'] },
   { category: 'Workspace', label: 'Toggle Framewire AI', keys: ['Shift', 'A'] },
+  { category: 'Workspace', label: 'Open or close Studio', keys: ['Shift', 'S'] },
   { category: 'Workspace', label: 'Show all shortcuts', keys: ['?'] },
 ]

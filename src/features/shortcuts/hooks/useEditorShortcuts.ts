@@ -6,9 +6,10 @@ interface ShortcutOptions {
   onExport: () => void
   onShowShortcuts: () => void
   onHideShortcuts: () => void
+  onToggleStudio: () => void
 }
 
-export function useEditorShortcuts({ onExport, onShowShortcuts, onHideShortcuts }: ShortcutOptions) {
+export function useEditorShortcuts({ onExport, onShowShortcuts, onHideShortcuts, onToggleStudio }: ShortcutOptions) {
   const copiedIds = useRef<string[]>([])
   const modeBeforeHand = useRef<EditorMode | null>(null)
 
@@ -42,6 +43,8 @@ export function useEditorShortcuts({ onExport, onShowShortcuts, onHideShortcuts 
         event.preventDefault(); onExport()
       } else if (event.shiftKey && key === 'a') {
         event.preventDefault(); state.setAiOpen(!state.aiOpen)
+      } else if (event.shiftKey && key === 's') {
+        event.preventDefault(); onToggleStudio()
       } else if (event.key === '?' || (event.shiftKey && event.code === 'Slash')) {
         event.preventDefault(); onShowShortcuts()
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -76,5 +79,5 @@ export function useEditorShortcuts({ onExport, onShowShortcuts, onHideShortcuts 
     window.addEventListener('keydown', keyDown)
     window.addEventListener('keyup', keyUp)
     return () => { window.removeEventListener('keydown', keyDown); window.removeEventListener('keyup', keyUp) }
-  }, [onExport, onHideShortcuts, onShowShortcuts])
+  }, [onExport, onHideShortcuts, onShowShortcuts, onToggleStudio])
 }
