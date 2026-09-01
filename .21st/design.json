@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "project": {
+    "name": "Framewire",
+    "productType": "visual website builder",
+    "stack": ["Vite", "React", "TypeScript", "Tailwind CSS", "Zustand"]
+  },
+  "sources": {
+    "tokens": [],
+    "components": [],
+    "assets": [],
+    "instructions": []
+  },
+  "design": {
+    "colorMode": "light and dark",
+    "colors": { "brand": "#4f5ff7", "lightSurface": "#fbfbf9", "darkSurface": "#1e1e1c" },
+    "typography": { "ui": "Inter / system sans" },
+    "spacing": { "base": 4, "control": 8 },
+    "radius": { "control": 8, "panel": 11 },
+    "shadows": { "editor": "restrained neutral elevation" },
+    "motion": {},
+    "density": "compact"
+  },
+  "components": {
+    "installed": [],
+    "preferredPrimitives": [],
+    "patterns": []
+  },
+  "constraints": {
+    "must": ["Use Lucide icons", "Support light and dark mode", "Keep canvas controls compact", "Use visible keyboard focus"],
+    "avoid": ["Decorative gradients", "Text glyphs as icons", "Excessive cards", "Glass effects"]
+  },
+  "decisions": [
+    "Use a ChatGPT-inspired neutral application shell with restrained cobalt interaction color.",
+    "Keep editing chrome dense and quiet so authored website frames remain the visual focus.",
+    "Use a four-panel workspace only when AI is open; otherwise preserve maximum canvas area."
+  ],
+  "evidence": [],
+  "generatedAt": "2026-08-31T17:02:33.458Z"
+}
