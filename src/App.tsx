@@ -9,9 +9,11 @@ import { useEditorStore } from './store/editorStore'
 import type { ProjectDocument } from './types'
 import { ShortcutModal } from './features/shortcuts/components/ShortcutModal'
 import { useEditorShortcuts } from './features/shortcuts/hooks/useEditorShortcuts'
+import { useStudioStore } from './features/studio/store/studioStore'
 
 const AiSidebar = lazy(() => import('./features/ai/components/AiSidebar').then((module) => ({ default: module.AiSidebar })))
 const PreviewModal = lazy(() => import('./features/preview/components/PreviewModal').then((module) => ({ default: module.PreviewModal })))
+const StudioWorkbench = lazy(() => import('./features/studio/components/StudioWorkbench').then((module) => ({ default: module.StudioWorkbench })))
 
 export function App() {
   const theme = useEditorStore((state) => state.theme)
@@ -19,11 +21,24 @@ export function App() {
   const previewOpen = useEditorStore((state) => state.previewOpen)
   const [error, setError] = useState<string | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const studioOpen = useStudioStore((state) => state.open)
+  const projectUpdatedAt = useEditorStore((state) => state.project.updatedAt)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
   }, [theme])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const project = useEditorStore.getState().project
+      if (!project.pages.length) return
+      const studio = useStudioStore.getState()
+      if (studio.versions[0]?.document.updatedAt === project.updatedAt) return
+      studio.createVersion(project, `Autosave · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 'autosave', 'Created after 90 seconds without edits.')
+    }, 90_000)
+    return () => window.clearTimeout(timer)
+  }, [projectUpdatedAt])
 
   const runExport = useCallback(async () => {
     setError(null)
@@ -40,7 +55,8 @@ export function App() {
 
   const showShortcuts = useCallback(() => setShortcutsOpen(true), [])
   const hideShortcuts = useCallback(() => setShortcutsOpen(false), [])
-  useEditorShortcuts({ onExport: runExport, onShowShortcuts: showShortcuts, onHideShortcuts: hideShortcuts })
+  const toggleStudio = useCallback(() => useStudioStore.getState().setOpen(!useStudioStore.getState().open), [])
+  useEditorShortcuts({ onExport: runExport, onShowShortcuts: showShortcuts, onHideShortcuts: hideShortcuts, onToggleStudio: toggleStudio })
 
   const runJsonExport = async () => {
     const { exportProjectJson } = await import('./features/export/lib/exportProject')
@@ -73,6 +89,7 @@ export function App() {
       </div>
       {error && <div className="floating-error"><ErrorState compact title="Export failed" message={error} onRetry={() => void runExport()} /></div>}
       {previewOpen && <Suspense fallback={<div className="modal-backdrop panel-loading" aria-label="Loading preview" />}><PreviewModal /></Suspense>}
+      {studioOpen && <Suspense fallback={<div className="studio-backdrop panel-loading" aria-label="Loading Studio" />}><StudioWorkbench /></Suspense>}
       <ShortcutModal open={shortcutsOpen} onClose={hideShortcuts} />
     </div>
   )

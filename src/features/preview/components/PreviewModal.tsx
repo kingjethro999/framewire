@@ -9,6 +9,7 @@ import { usePrototypeRuntime } from '../hooks/usePrototypeRuntime'
 import { CustomSelect } from '../../../components/ui/CustomSelect'
 import { ErrorState } from '../../../components/ui/ErrorState'
 import { useResponsiveAssistant } from '../hooks/useResponsiveAssistant'
+import { withWorkspace } from '../../studio/lib/workspaceDefaults'
 
 const devices = {
   desktop: { width: 1200, icon: Monitor, label: 'Desktop' },
@@ -49,18 +50,23 @@ export function PreviewModal() {
           {responsive.message && !responsive.error && <div className="preview-success"><CheckCircle2 size={14} />{responsive.message}</div>}
           <div className={clsx('preview-device', `is-${device}`, runtime.transition && `transition-${runtime.transition}`)} style={{ width: devices[device].width, minHeight: frame ? frame.height * ratio : 720, '--project-font': project.tokens.fontFamily } as React.CSSProperties}>
             {frame && <div className="preview-page" style={{ width: frame.width, height: frame.height, background: frame.background, transform: `scale(${ratio})`, transformOrigin: 'top left' }}>
-              {elements.map((element) => !runtime.hiddenIds.has(element.id) && element.visible && (
+              {elements.map((element) => {
+                const definition = withWorkspace(project.workspace).components.find((item) => item.id === element.componentDefinitionId)
+                const variant = definition?.variants.find((item) => item.id === (runtime.variantOverrides[element.id] ?? element.componentVariantId))
+                const renderedElement = variant ? { ...element, ...variant.overrides, style: variant.overrides.style ? { ...element.style, ...variant.overrides.style } : element.style } : element
+                return !runtime.hiddenIds.has(element.id) && element.visible && (
                 <div
                   key={element.id}
                   data-preview-id={element.id}
                   className={clsx('preview-element', project.connections.some((item) => item.sourceId === element.id) && 'is-interactive')}
-                  style={{ ...getElementStyle(element), position: 'absolute', left: element.x, top: element.y, width: element.width, height: element.height }}
+                  style={{ ...getElementStyle(renderedElement), position: 'absolute', left: renderedElement.x, top: renderedElement.y, width: renderedElement.width, height: renderedElement.height }}
                   tabIndex={project.connections.some((item) => item.sourceId === element.id) ? 0 : undefined}
                   {...runtime.handlersFor(element.id)}
                 >
-                  <ElementRenderer element={element} content={runtime.textOverrides[element.id]} />
+                  <ElementRenderer element={renderedElement} content={runtime.textOverrides[element.id]} />
                 </div>
-              ))}
+                )
+              })}
             </div>}
           </div>
         </div>

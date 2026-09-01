@@ -24,7 +24,7 @@
   "components": {
     "installed": [],
     "preferredPrimitives": ["CustomSelect", "ConfirmDialog", "ErrorState"],
-    "patterns": ["Search listboxes only when option density warrants it", "Keep destructive controls visible on hover and keyboard focus"]
+    "patterns": ["Search listboxes only when option density warrants it", "Keep destructive controls visible on hover and keyboard focus", "Use a single code-split Studio workbench for advanced project systems", "Group advanced tools as Build, Content, Quality, and Ship"]
   },
   "constraints": {
     "must": ["Use Lucide icons", "Support light and dark mode", "Keep canvas controls compact", "Use visible keyboard focus"],
@@ -36,7 +36,10 @@
     "Use a four-panel workspace only when AI is open; otherwise preserve maximum canvas area.",
     "Use custom accessible listboxes instead of native selects, adding search only for larger option sets.",
     "Starter content remains ordinary undoable project data and can be removed down to an empty project.",
-    "Treat AI-responsive results as editable device frames and export them through explicit breakpoint media queries."
+    "Treat AI-responsive results as editable device frames and export them through explicit breakpoint media queries.",
+    "Advanced systems live in a full-screen compact Studio workbench so the primary canvas remains focused and lightweight.",
+    "Studio uses a quiet navigation rail and dense neutral cards; status color communicates state rather than decorating the interface.",
+    "Large secondary systems are lazy-loaded, while version history and activity are capped to protect browser memory."
   ],
   "evidence": [],
   "generatedAt": "2026-08-31T17:02:33.458Z"
